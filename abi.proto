@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package abi;
+
+// request from client
+message CommandRequest {
+  oneof request_data {
+    Hget hget = 1;
+    Hgetall hgetall = 2;
+    Hmget hmget = 3;
+    Hset hset = 4;
+    Hmset hmset = 5;
+    Hdel hdel = 6;
+    Hmdel hmdel = 7;
+    Hexists hexists = 8;
+    Hmexists hmexists = 9;
+  }
+}
+
+// response from server
+message CommandResponse {
+  // status code,reused http status code
+  uint32 status = 1;
+  // if not 2xx, message will be included details
+  string message = 2;
+  // successful response values
+  repeated Value values = 3;
+  // successful response key-value pairs
+  repeated Kvpair pairs = 4;
+}
+
+// get a key from table, return value
+message Hget {
+  string table = 1;
+  string key = 2;
+}
+
+// get all key-value pairs from table
+message Hgetall { string table = 1; }
+
+// get multiple keys from table, return values
+message Hmget {
+  string table = 1;
+  repeated string keys = 2;
+}
+// return value if key exists in table
+message Value {
+  oneof value {
+    string string = 1;
+    bytes binary = 2;
+    int64 integer = 3;
+    double float = 4;
+    bool bool = 5;
+  }
+}
+
+// key-value pair
+message Kvpair {
+  string key = 1;
+  Value value = 2;
+}
+
+// set key-value pair to table, if table not exists, create it
+message Hset {
+  string table = 1;
+  Kvpair pair = 2;
+}
+
+// set multiple key-value pairs to table, if table not exists, create it
+message Hmset {
+  string table = 1;
+  repeated Kvpair pairs = 2;
+}
+
+// delete a key from table
+message Hdel {
+  string table = 1;
+  string key = 2;
+}
+
+// delete multiple keys from table
+message Hmdel {
+  string table = 1;
+  repeated string keys = 2;
+}
+
+// check if a key exists in table
+message Hexists {
+  string table = 1;
+  string key = 2;
+}
+
+// check if multiple keys exists in table
+message Hmexists {
+  string table = 1;
+  repeated string keys = 2;
+}
