@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     let mut client =
         AsyncProstStream::<_, CommandResponse, CommandRequest, _>::from(stream).for_async();
 
-    let cmd = CommandRequest::new_hset("table1", "hello", "world".to_string().into());
+    let cmd = CommandRequest::hset("table1", "hello", "world".to_string().into());
 
     client.send(cmd).await?;
     if let Some(Ok(data)) = client.next().await {
