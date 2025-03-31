@@ -513,6 +513,7 @@ dependencies = [
  "rand 0.9.0",
  "serde",
  "sled",
+ "tempfile",
  "thiserror 2.0.12",
  "tokio",
  "tokio-rustls",

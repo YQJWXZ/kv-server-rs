@@ -1,8 +1,10 @@
 mod memory;
+mod sleddb;
 
 use crate::{KvError, Kvpair, Value};
-pub use memory::MemTable;
 
+pub use memory::MemTable;
+pub use sleddb::SledDb;
 // we don't care where the data is stored, but we need to define how to deal with storage
 pub trait Storage: Send + Sync + 'static {
     // get a key value from HashTable
@@ -45,6 +47,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{memory::MemTable, *};
+    use tempfile::tempdir;
 
     #[test]
     fn memtable_basic_interface_should_work() {
@@ -58,6 +61,21 @@ mod tests {
         test_get_all(store);
     }
 
+    #[test]
+    fn sleddb_basic_interface_should_work() {
+        let dir = tempdir().unwrap();
+        let store = SledDb::new(dir);
+        test_basi_interface(store);
+    }
+
+    #[test]
+    fn sleddb_get_all_should_work() {
+        let dir = tempdir().unwrap();
+        let store = SledDb::new(dir);
+        test_get_all(store);
+    }
+
+    // encapsulate the test code for basic interface, so that we can use different storage implementation
     fn test_basi_interface(store: impl Storage) {
         // first set should create the table, insert key and return None Value
         let v = store.set("t1", "hello".into(), "world".into());

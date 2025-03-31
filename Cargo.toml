@@ -28,6 +28,7 @@ anyhow = "1.0.97"
 async-prost = "0.2.1" # Obsoleted, support protofub to tcp frame
 futures = "0.3.31"
 rand = "0.9.0"
+tempfile = "3.19.1"
 tokio = { version = "1.44.1", features = ["rt", "rt-multi-thread", "io-util", "macros", "net"] }
 tokio-util = { version = "0.7.14", features = ["codec"] }
 tracing-subscriber = "0.3.19"
