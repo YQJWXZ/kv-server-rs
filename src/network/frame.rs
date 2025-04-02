@@ -116,7 +116,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::Value;
+    use crate::{utils::DummyStream, Value};
     use bytes::Bytes;
 
     use super::*;
@@ -163,23 +163,6 @@ mod tests {
     fn is_compressed(data: &[u8]) -> bool {
         let header = u32::from_be_bytes(data[..4].try_into().unwrap()) as usize;
         header & COMPRESSION_BIT == COMPRESSION_BIT
-    }
-
-    struct DummyStream {
-        buf: BytesMut,
-    }
-
-    impl AsyncRead for DummyStream {
-        fn poll_read(
-            self: std::pin::Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-            buf: &mut tokio::io::ReadBuf<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            let len = buf.capacity();
-            let data = self.get_mut().buf.split_to(len);
-            buf.put_slice(&data);
-            std::task::Poll::Ready(Ok(()))
-        }
     }
 
     #[tokio::test]
