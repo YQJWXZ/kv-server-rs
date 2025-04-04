@@ -5,7 +5,7 @@ use kv_server_rs::{MemTable, ProstServerStream, Service, ServiceInner, TlsServer
 use tokio::{net::TcpListener, time};
 use tracing::info;
 
-use kv_server_rs::service::{subscribe_gc::gc_subscriptions, topic::Broadcaster};
+use kv_server_rs::{gc_subscriptions, Broadcaster};
 async fn start_gc(broadcaster: Arc<Broadcaster>) {
     let mut interval = time::interval(std::time::Duration::from_secs(60 * 60)); // 1 hour
     loop {

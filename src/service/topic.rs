@@ -9,6 +9,8 @@ use tracing::{debug, info, warn};
 
 use crate::{CommandResponse, KvError, Value};
 
+use super::subscribe_gc::Subscription;
+
 /// the max data size of a topic
 const BROADCAST_CAPACITY: usize = 128;
 
@@ -35,11 +37,6 @@ pub struct Broadcaster {
     pub(crate) topics: DashMap<String, DashSet<u32>>,
     // all subscriptions
     pub(crate) subscriptions: DashMap<u32, Subscription>,
-}
-
-pub struct Subscription {
-    pub sender: mpsc::Sender<Arc<CommandResponse>>,
-    pub last_active: std::time::Instant,
 }
 
 impl Topic for Arc<Broadcaster> {

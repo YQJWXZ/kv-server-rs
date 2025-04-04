@@ -1,5 +1,5 @@
 use futures::stream;
-use topic::{Broadcaster, Topic};
+use topic::Topic;
 use topic_service::{StreamingResponse, TopicService};
 use tracing::debug;
 
@@ -9,9 +9,12 @@ use crate::{
 use std::sync::Arc;
 
 mod command_service;
-pub mod subscribe_gc;
-pub mod topic;
+mod subscribe_gc;
+mod topic;
 mod topic_service;
+
+pub use subscribe_gc::gc_subscriptions;
+pub use topic::Broadcaster;
 
 pub trait CommandService {
     fn execute(self, store: &impl Storage) -> CommandResponse;
