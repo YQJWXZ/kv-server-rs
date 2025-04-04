@@ -63,9 +63,12 @@ where
         }
     }
 
-    pub async fn execute_unary(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
+    pub async fn execute_unary(
+        &mut self,
+        cmd: &CommandRequest,
+    ) -> Result<CommandResponse, KvError> {
         let stream = &mut self.inner;
-        stream.send(&cmd).await?;
+        stream.send(cmd).await?;
 
         match stream.next().await {
             Some(v) => v,
@@ -150,11 +153,11 @@ mod tests {
         let mut client = ProstClientStream::new(stream);
 
         let cmd = CommandRequest::hset("t1", "hello", "world".into());
-        let res = client.execute_unary(cmd).await?;
+        let res = client.execute_unary(&cmd).await?;
         assert_res_ok(&res, &[Value::default()], &[]);
 
         let cmd = CommandRequest::hget("t1", "hello");
-        let res = client.execute_unary(cmd).await?;
+        let res = client.execute_unary(&cmd).await?;
         assert_res_ok(&res, &["world".into()], &[]);
         Ok(())
     }
@@ -167,12 +170,12 @@ mod tests {
 
         let v: Value = Bytes::from(vec![0u8; 16384]).into();
         let cmd = CommandRequest::hset("t2", "foo", v.clone());
-        let res = client.execute_unary(cmd).await?;
+        let res = client.execute_unary(&cmd).await?;
 
         assert_res_ok(&res, &[Value::default()], &[]);
 
         let cmd = CommandRequest::hget("t2", "foo");
-        let res = client.execute_unary(cmd).await?;
+        let res = client.execute_unary(&cmd).await?;
 
         assert_res_ok(&res, &[v], &[]);
 

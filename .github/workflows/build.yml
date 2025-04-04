@@ -33,6 +33,12 @@ jobs:
       - name: install nextest
         uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
+      - name: Mkdir fixtures
+        run: mkdir -p ./fixtures
+      - name: Generate CERT
+        run: cargo run --example gen_cert
+      - name: Generate Configuration
+        run: cargo run --example gen_config
       - name: Check code format
         run: cargo fmt -- --check
       - name: Check the package for errors
