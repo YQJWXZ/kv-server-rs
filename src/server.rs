@@ -1,7 +1,19 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use kv_server_rs::{MemTable, ProstServerStream, Service, ServiceInner, TlsServerAcceptor};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, time};
 use tracing::info;
+
+use kv_server_rs::service::{subscribe_gc::gc_subscriptions, topic::Broadcaster};
+async fn start_gc(broadcaster: Arc<Broadcaster>) {
+    let mut interval = time::interval(std::time::Duration::from_secs(60 * 60)); // 1 hour
+    loop {
+        interval.tick().await;
+        info!("Running garbage collection");
+        gc_subscriptions(broadcaster.clone()).await;
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -14,7 +26,11 @@ async fn main() -> Result<()> {
 
     let acceptor = TlsServerAcceptor::new(server_cert, server_key, Some(ca_cert))?;
 
-    let service: Service = ServiceInner::new(MemTable::new()).into();
+    let service_inner = ServiceInner::new(MemTable::new());
+    let broadcaster = service_inner.broadcaster.clone();
+    let service: Service = service_inner.into();
+
+    tokio::spawn(start_gc(broadcaster));
 
     let listener = TcpListener::bind(addr).await?;
     info!("Start listening on {}", addr);

@@ -1,7 +1,7 @@
 mod error;
 mod network;
 mod pb;
-mod service;
+pub mod service;
 mod storage;
 
 pub use error::KvError;

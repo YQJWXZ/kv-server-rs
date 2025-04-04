@@ -1,6 +1,6 @@
 use abi::{
     command_request::RequestData, value, CommandRequest, CommandResponse, Hdel, Hexists, Hget,
-    Hgetall, Hmdel, Hmexists, Hmget, Hmset, Hset, Kvpair, Value,
+    Hgetall, Hmdel, Hmexists, Hmget, Hmset, Hset, Kvpair, Publish, Subscribe, Unsubscribe, Value,
 };
 use bytes::Bytes;
 use http::StatusCode;
@@ -86,6 +86,30 @@ impl CommandRequest {
             request_data: Some(RequestData::Hmexists(Hmexists {
                 table: table.into(),
                 keys,
+            })),
+        }
+    }
+
+    pub fn subscribe(name: impl Into<String>) -> Self {
+        Self {
+            request_data: Some(RequestData::Subscribe(Subscribe { topic: name.into() })),
+        }
+    }
+
+    pub fn unsubscribe(name: impl Into<String>, id: u32) -> Self {
+        Self {
+            request_data: Some(RequestData::Unsubscribe(Unsubscribe {
+                topic: name.into(),
+                id,
+            })),
+        }
+    }
+
+    pub fn publish(name: impl Into<String>, data: Vec<Value>) -> Self {
+        Self {
+            request_data: Some(RequestData::Publish(Publish {
+                topic: name.into(),
+                data,
             })),
         }
     }
@@ -188,10 +212,10 @@ impl<const N: usize> From<[u8; N]> for Value {
     }
 }
 
-impl TryFrom<Value> for i64 {
+impl TryFrom<&Value> for i64 {
     type Error = KvError;
 
-    fn try_from(v: Value) -> Result<Self, Self::Error> {
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.value {
             Some(value::Value::Integer(i)) => Ok(i),
             _ => Err(KvError::ConvertError(v.format(), "Integer")),
@@ -300,6 +324,21 @@ impl From<Vec<Value>> for CommandResponse {
             status: StatusCode::OK.as_u16() as _,
             values: v,
             ..Default::default()
+        }
+    }
+}
+
+impl TryFrom<&CommandResponse> for i64 {
+    type Error = KvError;
+
+    fn try_from(value: &CommandResponse) -> Result<Self, Self::Error> {
+        if value.status != StatusCode::OK.as_u16() as u32 {
+            return Err(KvError::ConvertError(value.format(), "CommandResponse"));
+        }
+
+        match value.values.first() {
+            Some(v) => v.try_into(),
+            None => Err(KvError::ConvertError(value.format(), "CommandResponse")),
         }
     }
 }

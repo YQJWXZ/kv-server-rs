@@ -1,20 +1,26 @@
 mod frame;
+mod multiplex;
 mod stream;
+mod stream_result;
 mod tls;
 
+pub use frame::{read_frame, FrameCoder};
+pub use multiplex::YamuxCtrl;
+pub use stream::ProstStream;
+pub use stream_result::StreamResult;
+pub use tls::{TlsClientConnector, TlsServerAcceptor};
+
 use futures::{SinkExt, StreamExt};
-use stream::ProstStream;
+
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::info;
 
-use crate::{CommandRequest, CommandResponse, KvError, Service};
+use crate::{CommandRequest, CommandResponse, KvError, Service, Storage};
 
-pub use frame::{read_frame, FrameCoder};
-pub use tls::{TlsClientConnector, TlsServerAcceptor};
 /// Handle read and write of sockets from an accept on the server.
-pub struct ProstServerStream<S> {
+pub struct ProstServerStream<S, T> {
     inner: ProstStream<S, CommandRequest, CommandResponse>,
-    service: Service,
+    service: Service<T>,
 }
 
 /// Handle read and write client sockets.
@@ -22,11 +28,12 @@ pub struct ProstClientStream<S> {
     inner: ProstStream<S, CommandResponse, CommandRequest>,
 }
 
-impl<S> ProstServerStream<S>
+impl<S, T> ProstServerStream<S, T>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
+    T: Storage,
 {
-    pub fn new(stream: S, service: Service) -> Self {
+    pub fn new(stream: S, service: Service<T>) -> Self {
         Self {
             inner: ProstStream::new(stream),
             service,
@@ -37,17 +44,18 @@ where
         let stream = &mut self.inner;
         while let Some(Ok(cmd)) = stream.next().await {
             info!("Got a new command: {:?}", cmd);
-            let res = self.service.execute(cmd);
-            stream.send(res).await?;
+            let mut res = self.service.execute(cmd);
+            while let Some(data) = res.next().await {
+                stream.send(&data).await.unwrap();
+            }
         }
-
         Ok(())
     }
 }
 
 impl<S> ProstClientStream<S>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     pub fn new(stream: S) -> Self {
         Self {
@@ -55,14 +63,23 @@ where
         }
     }
 
-    pub async fn execute(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
+    pub async fn execute_unary(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
         let stream = &mut self.inner;
-        stream.send(cmd).await?;
+        stream.send(&cmd).await?;
 
         match stream.next().await {
             Some(v) => v,
             None => Err(KvError::Internal("Didn't get any response".into())),
         }
+    }
+
+    pub async fn execute_streaming(self, cmd: &CommandRequest) -> Result<StreamResult, KvError> {
+        let mut stream = self.inner;
+
+        stream.send(cmd).await?;
+        stream.close().await?;
+
+        StreamResult::new(stream).await
     }
 }
 
@@ -73,6 +90,7 @@ pub mod utils {
     use bytes::BytesMut;
     use tokio::io::{AsyncRead, AsyncWrite};
 
+    #[derive(Default)]
     pub struct DummyStream {
         pub buf: BytesMut,
     }
@@ -132,11 +150,11 @@ mod tests {
         let mut client = ProstClientStream::new(stream);
 
         let cmd = CommandRequest::hset("t1", "hello", "world".into());
-        let res = client.execute(cmd).await?;
+        let res = client.execute_unary(cmd).await?;
         assert_res_ok(&res, &[Value::default()], &[]);
 
         let cmd = CommandRequest::hget("t1", "hello");
-        let res = client.execute(cmd).await?;
+        let res = client.execute_unary(cmd).await?;
         assert_res_ok(&res, &["world".into()], &[]);
         Ok(())
     }
@@ -149,12 +167,12 @@ mod tests {
 
         let v: Value = Bytes::from(vec![0u8; 16384]).into();
         let cmd = CommandRequest::hset("t2", "foo", v.clone());
-        let res = client.execute(cmd).await?;
+        let res = client.execute_unary(cmd).await?;
 
         assert_res_ok(&res, &[Value::default()], &[]);
 
         let cmd = CommandRequest::hget("t2", "foo");
-        let res = client.execute(cmd).await?;
+        let res = client.execute_unary(cmd).await?;
 
         assert_res_ok(&res, &[v], &[]);
 

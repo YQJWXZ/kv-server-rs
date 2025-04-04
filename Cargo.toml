@@ -30,12 +30,18 @@ thiserror = "2.0.12"
 tokio = { version = "1.44.1", features = ["full"] }
 tokio-rustls = "0.22" # Obsoleted
 tokio-stream = { version = "0.1.17", features = ["sync"] }
+tokio-util = { version = "0.7.14", features = ["compat"] }
 toml = "0.8.20"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-opentelemetry = "0.30.0"
 tracing-subscriber = { version = "0.3.19", features = ["json", "chrono"] }
-yamux = "0.13.4"
+yamux = "0.9"
+
+
+
+
+
 
 [dev-dependencies]
 

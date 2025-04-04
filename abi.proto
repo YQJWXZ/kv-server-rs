@@ -14,6 +14,9 @@ message CommandRequest {
     Hmdel hmdel = 7;
     Hexists hexists = 8;
     Hmexists hmexists = 9;
+    Subscribe subscribe = 10;
+    Unsubscribe unsubscribe = 11;
+    Publish publish = 12;
   }
 }
 
@@ -94,4 +97,21 @@ message Hexists {
 message Hmexists {
   string table = 1;
   repeated string keys = 2;
+}
+
+// subscribe to a topic, any data posted to this topic will be received
+// After success, the first commandResponse is returned, and we return a unique
+// subscription Id
+message Subscribe { string topic = 1; }
+
+// cancel a subscription
+message Unsubscribe {
+  string topic = 1;
+  uint32 id = 2;
+}
+
+// publish data to a topic
+message Publish {
+  string topic = 1;
+  repeated Value data = 2;
 }

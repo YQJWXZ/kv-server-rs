@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_prost::AsyncProstStream;
-use futures::prelude::*;
+use futures::{prelude::*, StreamExt};
 use kv_server_rs::{CommandRequest, CommandResponse, Service, ServiceInner, SledDb};
 use tokio::net::TcpListener;
 use tracing::info;
@@ -26,8 +26,11 @@ async fn main() -> Result<()> {
             let mut stream =
                 AsyncProstStream::<_, CommandRequest, CommandResponse, _>::from(stream).for_async();
             while let Some(Ok(cmd)) = stream.next().await {
-                let res = svc.execute(cmd);
-                stream.send(res).await.unwrap();
+                info!("Got a new command: {:?}", cmd);
+                let mut res = svc.execute(cmd);
+                while let Some(data) = res.next().await {
+                    stream.send(data.as_ref().clone()).await.unwrap();
+                }
             }
             info!("Client {:?} disconnected", addr);
         });

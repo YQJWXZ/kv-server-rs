@@ -1,3 +1,6 @@
+use futures::stream;
+use topic::{Broadcaster, Topic};
+use topic_service::{StreamingResponse, TopicService};
 use tracing::debug;
 
 use crate::{
@@ -6,6 +9,9 @@ use crate::{
 use std::sync::Arc;
 
 mod command_service;
+pub mod subscribe_gc;
+pub mod topic;
+mod topic_service;
 
 pub trait CommandService {
     fn execute(self, store: &impl Storage) -> CommandResponse;
@@ -44,27 +50,33 @@ impl<Arg> NotifyMut<Arg> for Vec<fn(&mut Arg)> {
 // and return CommandResponse
 pub struct Service<T = MemTable> {
     inner: Arc<ServiceInner<T>>,
+    broadcaster: Arc<Broadcaster>,
 }
 
 impl<T: Storage> Service<T> {
-    pub fn execute(&self, cmd: CommandRequest) -> CommandResponse {
+    pub fn execute(&self, cmd: CommandRequest) -> StreamingResponse {
         debug!("Got request: {:?}", cmd);
         self.inner.on_received.notify(&cmd);
-        let mut res = dispatch(cmd, &self.inner.store);
-        debug!("Executed response: {:?}", res);
-        self.inner.on_executed.notify(&res);
-        self.inner.on_before_send.notify(&mut res);
-        if !self.inner.on_before_send.is_empty() {
-            debug!("Modified response: {:?}", res);
-        };
+        let mut res = dispatch(cmd.clone(), &self.inner.store);
+        if res == CommandResponse::default() {
+            dispatch_stream(cmd, Arc::clone(&self.broadcaster))
+        } else {
+            debug!("Executed response: {:?}", res);
+            self.inner.on_executed.notify(&res);
+            self.inner.on_before_send.notify(&mut res);
+            if !self.inner.on_before_send.is_empty() {
+                debug!("Modified response: {:?}", res);
+            };
 
-        res
+            Box::pin(stream::once(async { Arc::new(res) }))
+        }
     }
 }
 impl<T> Clone for Service<T> {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
+            broadcaster: Arc::clone(&self.broadcaster),
         }
     }
 }
@@ -83,6 +95,7 @@ pub struct ServiceInner<T> {
     on_before_send: Vec<fn(&mut CommandResponse)>,
     /// event triggered after the server sends CommandResponse
     on_after_send: Vec<fn()>,
+    pub broadcaster: Arc<Broadcaster>,
 }
 
 impl<T: Storage> ServiceInner<T> {
@@ -93,6 +106,7 @@ impl<T: Storage> ServiceInner<T> {
             on_executed: Vec::new(),
             on_before_send: Vec::new(),
             on_after_send: Vec::new(),
+            broadcaster: Arc::new(Broadcaster::default()),
         }
     }
 
@@ -119,8 +133,10 @@ impl<T: Storage> ServiceInner<T> {
 
 impl<T: Storage> From<ServiceInner<T>> for Service<T> {
     fn from(inner: ServiceInner<T>) -> Self {
+        let broadcaster = inner.broadcaster.clone();
         Self {
             inner: Arc::new(inner),
+            broadcaster,
         }
     }
 }
@@ -138,15 +154,28 @@ pub fn dispatch(cmd: CommandRequest, store: &impl Storage) -> CommandResponse {
         Some(RequestData::Hexists(param)) => param.execute(store),
         Some(RequestData::Hmexists(param)) => param.execute(store),
         None => KvError::InvalidCommand("Request has no data".into()).into(),
+
+        // if the command is not supported, return Response with nothing, then will be handled by "dispatch_stream"
+        _ => CommandResponse::default(),
+    }
+}
+
+/// This function is used to dispatch the stream from the Request to the Response
+pub fn dispatch_stream(cmd: CommandRequest, topic: impl Topic) -> StreamingResponse {
+    match cmd.request_data {
+        Some(RequestData::Subscribe(param)) => param.execute(topic),
+        Some(RequestData::Unsubscribe(param)) => param.execute(topic),
+        Some(RequestData::Publish(param)) => param.execute(topic),
+
+        _ => unreachable!(),
     }
 }
 
 #[cfg(test)]
 use crate::{Kvpair, Value};
 
-/// this function is used to assert the response is ok
-/// the function has implemented the sorting for pairs
 #[cfg(test)]
+/// this function is used to assert the response is ok
 pub fn assert_res_ok(res: &CommandResponse, values: &[Value], pairs: &[Kvpair]) {
     let mut sorted_pairs = res.pairs.clone();
     sorted_pairs.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -156,8 +185,8 @@ pub fn assert_res_ok(res: &CommandResponse, values: &[Value], pairs: &[Kvpair]) 
     assert_eq!(sorted_pairs, pairs);
 }
 
-// this function is used to assert the response is error
 #[cfg(test)]
+/// the function has implemented the sorting for pairs
 pub fn assert_res_err(res: &CommandResponse, code: u32, msg: &str) {
     assert_eq!(res.status, code);
     assert!(res.message.contains(msg));
@@ -167,29 +196,31 @@ pub fn assert_res_err(res: &CommandResponse, code: u32, msg: &str) {
 
 #[cfg(test)]
 mod tests {
+    use futures::StreamExt;
     use http::StatusCode;
     use tracing::info;
 
     use super::*;
-    use std::thread;
 
-    #[test]
-    fn service_should_work() {
+    #[tokio::test]
+    async fn service_should_work() {
         let service: Service = ServiceInner::new(MemTable::default()).into();
         let cloned = service.clone();
-        let handle = thread::spawn(move || {
-            let res = cloned.execute(CommandRequest::hset("t1", "hello", "world".into()));
-            assert_res_ok(&res, &[Value::default()], &[]);
-        });
+        tokio::spawn(async move {
+            let mut res = cloned.execute(CommandRequest::hset("t1", "hello", "world".into()));
+            let data = res.next().await.unwrap();
+            assert_res_ok(&data, &[Value::default()], &[]);
+        })
+        .await
+        .unwrap();
 
-        handle.join().unwrap();
-
-        let res = service.execute(CommandRequest::hget("t1", "hello"));
-        assert_res_ok(&res, &["world".into()], &[]);
+        let mut res = service.execute(CommandRequest::hget("t1", "hello"));
+        let data = res.next().await.unwrap();
+        assert_res_ok(&data, &["world".into()], &[]);
     }
 
-    #[test]
-    fn event_registration_should_work() {
+    #[tokio::test]
+    async fn event_registration_should_work() {
         fn rece(cmd: &CommandRequest) {
             info!("Got: {:?}", cmd);
         }
@@ -213,10 +244,11 @@ mod tests {
             .on_after_send(a_send)
             .into();
 
-        let res = service.execute(CommandRequest::hset("t1", "hello", "world".into()));
+        let mut res = service.execute(CommandRequest::hset("t1", "hello", "world".into()));
+        let data = res.next().await.unwrap();
 
-        assert_eq!(res.status, StatusCode::CREATED.as_u16() as _);
-        assert_eq!(res.message, "");
-        assert_eq!(res.values, &[Value::default()]);
+        assert_eq!(data.status, StatusCode::CREATED.as_u16() as u32);
+        assert_eq!(data.message, "");
+        assert_eq!(data.values, &[Value::default()]);
     }
 }

@@ -4,7 +4,10 @@
 #[rustfmt::skip]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommandRequest {
-    #[prost(oneof = "command_request::RequestData", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+    #[prost(
+        oneof = "command_request::RequestData",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+    )]
     pub request_data: ::core::option::Option<command_request::RequestData>,
 }
 /// Nested message and enum types in `CommandRequest`.
@@ -31,6 +34,12 @@ pub mod command_request {
         Hexists(super::Hexists),
         #[prost(message, tag = "9")]
         Hmexists(super::Hmexists),
+        #[prost(message, tag = "10")]
+        Subscribe(super::Subscribe),
+        #[prost(message, tag = "11")]
+        Unsubscribe(super::Unsubscribe),
+        #[prost(message, tag = "12")]
+        Publish(super::Publish),
     }
 }
 /// response from server
@@ -174,4 +183,34 @@ pub struct Hmexists {
     pub table: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// subscribe to a topic, any data posted to this topic will be received
+/// After success, the first commandResponse is returned, and we return a unique
+/// subscription Id
+#[derive(PartialOrd)]
+#[rustfmt::skip]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Subscribe {
+    #[prost(string, tag = "1")]
+    pub topic: ::prost::alloc::string::String,
+}
+/// cancel a subscription
+#[derive(PartialOrd)]
+#[rustfmt::skip]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Unsubscribe {
+    #[prost(string, tag = "1")]
+    pub topic: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub id: u32,
+}
+/// publish data to a topic
+#[derive(PartialOrd)]
+#[rustfmt::skip]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Publish {
+    #[prost(string, tag = "1")]
+    pub topic: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub data: ::prost::alloc::vec::Vec<Value>,
 }

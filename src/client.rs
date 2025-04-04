@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
 
     let cmd = CommandRequest::hset("t1", "hello", "world".to_string().into());
 
-    let data = client.execute(cmd).await?;
+    let data = client.execute_unary(cmd).await?;
 
     info!("Got response: {:?}", data);
     Ok(())
