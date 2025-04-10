@@ -1,45 +1,68 @@
-use std::sync::Arc;
+use std::env;
 
 use anyhow::Result;
-use kv_server_rs::{MemTable, ProstServerStream, Service, ServiceInner, TlsServerAcceptor};
-use tokio::{net::TcpListener, time};
-use tracing::info;
-
-use kv_server_rs::{gc_subscriptions, Broadcaster};
-async fn start_gc(broadcaster: Arc<Broadcaster>) {
-    let mut interval = time::interval(std::time::Duration::from_secs(60 * 60)); // 1 hour
-    loop {
-        interval.tick().await;
-        info!("Running garbage collection");
-        gc_subscriptions(broadcaster.clone()).await;
-    }
-}
+use kv_server_rs::{start_server_with_config, RotationConfig, ServerConfig};
+use opentelemetry::trace::TracerProvider;
+use opentelemetry_otlp::{Protocol, WithExportConfig};
+use tracing_subscriber::{
+    fmt::{self, format},
+    layer::SubscriberExt,
+    prelude::*,
+    EnvFilter,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    run_server().await
+}
 
-    let addr = "127.0.0.1:9527";
-    let ca_cert = include_str!("../fixtures/ca.cert");
-    let server_cert = include_str!("../fixtures/server.cert");
-    let server_key = include_str!("../fixtures/server.key");
+fn setup_tracing(config: &ServerConfig) -> Result<()> {
+    let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_http()
+        .with_protocol(Protocol::HttpBinary)
+        .build()?;
 
-    let acceptor = TlsServerAcceptor::new(server_cert, server_key, Some(ca_cert))?;
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(otlp_exporter)
+        .build();
 
-    let service_inner = ServiceInner::new(MemTable::new());
-    let broadcaster = service_inner.broadcaster.clone();
-    let service: Service = service_inner.into();
+    let tracer = provider.tracer("kv-server");
 
-    tokio::spawn(start_gc(broadcaster));
+    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let listener = TcpListener::bind(addr).await?;
-    info!("Start listening on {}", addr);
-    loop {
-        let tls = acceptor.clone();
-        let (stream, addr) = listener.accept().await?;
-        info!("Client {:?} connected", addr);
-        let stream = tls.accept(stream).await?;
-        let stream = ProstServerStream::new(stream, service.clone());
-        tokio::spawn(async move { stream.process().await });
-    }
+    let log = &config.log;
+    let file_appender = match log.rotation {
+        RotationConfig::Hourly => tracing_appender::rolling::hourly(&log.path, "server.log"),
+        RotationConfig::Daily => tracing_appender::rolling::daily(&log.path, "server.log"),
+        RotationConfig::Never => tracing_appender::rolling::never(&log.path, "server.log"),
+    };
+
+    let (non_blocking, _guard1) = tracing_appender::non_blocking(file_appender);
+    let fmt_layer = fmt::layer()
+        .event_format(format().compact())
+        .with_writer(non_blocking);
+
+    tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(fmt_layer)
+        .with(opentelemetry)
+        .init();
+
+    Ok(())
+}
+
+async fn run_server() -> Result<()> {
+    let config = match env::var("KV_SERVER_CONFIG") {
+        Ok(path) => ServerConfig::load(&path).await?,
+        Err(_) => {
+            let config_str = include_str!("../fixtures/server.conf").to_string();
+            toml::from_str(&config_str)?
+        }
+    };
+
+    setup_tracing(&config)?;
+
+    start_server_with_config(&config).await?;
+
+    Ok(())
 }

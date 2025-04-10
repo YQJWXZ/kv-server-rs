@@ -52,8 +52,8 @@ impl<Arg> NotifyMut<Arg> for Vec<fn(&mut Arg)> {
 // and call `execute` to execute the CommandRequest command
 // and return CommandResponse
 pub struct Service<T = MemTable> {
-    inner: Arc<ServiceInner<T>>,
-    broadcaster: Arc<Broadcaster>,
+    pub inner: Arc<ServiceInner<T>>,
+    pub broadcaster: Arc<Broadcaster>,
 }
 
 impl<T: Storage> Service<T> {

@@ -1,9 +1,12 @@
-use std::pin::Pin;
+use std::{
+    ops::{Deref, DerefMut},
+    pin::Pin,
+};
 
 use futures::{Stream, StreamExt};
 
 use crate::{CommandResponse, KvError};
-
+/// Get the subscription id between creation and use Deref/DerefMut to make it consistent with Stream
 pub struct StreamResult {
     pub id: u32,
     #[allow(dead_code)]
@@ -35,5 +38,19 @@ impl StreamResult {
             id: id?,
             inner: Box::pin(stream),
         })
+    }
+}
+
+impl Deref for StreamResult {
+    type Target = Pin<Box<dyn Stream<Item = Result<CommandResponse, KvError>> + Send>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for StreamResult {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }

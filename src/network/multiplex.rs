@@ -99,10 +99,10 @@ mod tests {
         let mut stream = ctrl.open_stream().await?;
 
         let cmd = CommandRequest::hset("t1", "hello", "world".into());
-        stream.execute_unary(cmd).await.unwrap();
+        stream.execute_unary(&cmd).await.unwrap();
 
         let cmd = CommandRequest::hget("t1", "hello");
-        let res = stream.execute_unary(cmd).await.unwrap();
+        let res = stream.execute_unary(&cmd).await.unwrap();
 
         assert_res_ok(&res, &["world".into()], &[]);
         Ok(())
