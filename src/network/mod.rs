@@ -88,7 +88,7 @@ where
 
 #[cfg(test)]
 pub mod utils {
-    use std::task::Poll;
+    use std::{cmp::min, task::Poll};
 
     use bytes::BytesMut;
     use tokio::io::{AsyncRead, AsyncWrite};
@@ -104,8 +104,9 @@ pub mod utils {
             _cx: &mut std::task::Context<'_>,
             buf: &mut tokio::io::ReadBuf<'_>,
         ) -> std::task::Poll<std::io::Result<()>> {
-            let len = buf.capacity();
-            let data = self.get_mut().buf.split_to(len);
+            let this = self.get_mut();
+            let len = min(buf.capacity(), this.buf.len());
+            let data = this.buf.split_to(len);
             buf.put_slice(&data);
             std::task::Poll::Ready(Ok(()))
         }

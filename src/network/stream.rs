@@ -114,3 +114,31 @@ where
 }
 
 impl<S, Req, Res> Unpin for ProstStream<S, Req, Res> where S: Unpin {}
+
+#[cfg(test)]
+mod tests {
+    use crate::{utils::DummyStream, CommandRequest};
+    use anyhow::Result;
+
+    use super::*;
+    use futures::{SinkExt, StreamExt};
+    #[allow(clippy::all)]
+    #[tokio::test]
+    async fn prost_stream_should_work() -> Result<()> {
+        let buf = BytesMut::new();
+        let stream = DummyStream { buf };
+
+        let mut stream = ProstStream::<_, CommandRequest, CommandRequest>::new(stream);
+        let cmd = CommandRequest::hdel("t1", "hello");
+
+        stream.send(&cmd).await?;
+
+        if let Some(Ok(s)) = stream.next().await {
+            assert_eq!(s, cmd);
+        } else {
+            assert!(false);
+        }
+
+        Ok(())
+    }
+}

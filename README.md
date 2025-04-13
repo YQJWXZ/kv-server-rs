@@ -32,6 +32,19 @@ To use custom domains/names, modify the example code:
 let pem = creat_cert(&ca, &["your.domain.com"], "Your Server Name", false)?;
 ```
 
+### Config Generation
+
+Generate configuration using the gen_cert example:
+
+```bash
+cargo run --example gen_config
+```
+
+This will create:
+
+- `fixtures/server.conf`: Server configuration
+- `fixtures/client.conf`: Client configuration
+
 ### Client Example (with TLS)
 
 ```rust

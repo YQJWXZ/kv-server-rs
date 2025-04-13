@@ -11,6 +11,7 @@ use tokio_rustls::{
     webpki::DNSNameRef,
     TlsAcceptor, TlsConnector,
 };
+use tracing::instrument;
 
 use crate::KvError;
 
@@ -32,6 +33,7 @@ pub struct TlsClientConnector {
 
 impl TlsClientConnector {
     // load server cert/CA cert and generate ServerConfig
+    #[instrument(name = "tls_connector_new", skip_all)]
     pub fn new(
         domain: impl Into<String>,
         identity: Option<(&str, &str)>,
@@ -66,6 +68,7 @@ impl TlsClientConnector {
         })
     }
 
+    #[instrument(name = "tls_client_connect", skip_all)]
     /// Trigger the TLS protocol and convert the underlying stream into TLS stream
     pub async fn connect<S>(&self, stream: S) -> Result<client::TlsStream<S>, KvError>
     where
@@ -83,6 +86,7 @@ impl TlsClientConnector {
 }
 
 impl TlsServerAcceptor {
+    #[instrument(name = "tls_acceptor_new", skip_all)]
     pub fn new(cert: &str, key: &str, client_ca: Option<&str>) -> Result<Self, KvError> {
         let certs = load_certs(cert)?;
         let key = load_key(key)?;
@@ -116,6 +120,7 @@ impl TlsServerAcceptor {
         })
     }
 
+    #[instrument(name = "tls_server_accept", skip_all)]
     /// Trigger the TLS protocol and convert the underlying stream into TLS stream
     pub async fn accept<S>(&self, stream: S) -> Result<server::TlsStream<S>, KvError>
     where

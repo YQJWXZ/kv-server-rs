@@ -1,7 +1,7 @@
 use futures::stream;
 use topic::Topic;
 use topic_service::{StreamingResponse, TopicService};
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use crate::{
     command_request::RequestData, CommandRequest, CommandResponse, KvError, MemTable, Storage,
@@ -57,6 +57,7 @@ pub struct Service<T = MemTable> {
 }
 
 impl<T: Storage> Service<T> {
+    #[instrument(name = "service_execute", skip_all)]
     pub fn execute(&self, cmd: CommandRequest) -> StreamingResponse {
         debug!("Got request: {:?}", cmd);
         self.inner.on_received.notify(&cmd);

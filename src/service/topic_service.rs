@@ -40,6 +40,8 @@ impl TopicService for Publish {
 #[cfg(test)]
 mod tests {
 
+    use tokio::time;
+
     use futures::StreamExt;
 
     use crate::{
@@ -55,6 +57,39 @@ mod tests {
         let mut res = dispatch_stream(cmd, topic);
         let id = get_id(&mut res).await;
         assert!(id > 0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_subscribe_abnoral_quit_should_be_removed_on_next_publish() {
+        let topic = Arc::new(Broadcaster::default());
+        let id = {
+            let cmd = CommandRequest::subscribe("lobby");
+            let mut res = dispatch_stream(cmd, topic.clone());
+            let id = get_id(&mut res).await;
+            drop(res);
+            id as u32
+        };
+
+        let cmd = CommandRequest::publish("lobby", vec!["hello".into()]);
+        let _ = dispatch_stream(cmd, topic.clone());
+        time::sleep(time::Duration::from_millis(10)).await;
+
+        let result = topic.unsubscribe("lobby".into(), id);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn dispatch_unsubscribe_should_work() {
+        let topic = Arc::new(Broadcaster::default());
+        let cmd = CommandRequest::subscribe("lobby");
+        let mut res = dispatch_stream(cmd, topic.clone());
+        let id = get_id(&mut res).await;
+
+        let cmd = CommandRequest::unsubscribe("lobby", id as _);
+        let mut res = dispatch_stream(cmd, topic.clone());
+        let data = res.next().await.unwrap();
+
+        assert_res_ok(&data, &[], &[]);
     }
 
     #[tokio::test]

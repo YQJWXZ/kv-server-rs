@@ -2,6 +2,7 @@ use futures::{future, Future, TryStreamExt};
 use std::marker::PhantomData;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::instrument;
 use yamux::{Config, Connection, ConnectionError, Control, Mode, WindowUpdateMode};
 
 use super::ProstClientStream;
@@ -28,6 +29,7 @@ where
         Self::new(stream, config, false, f)
     }
 
+    #[instrument(name = "yamux_ctrl::new", skip_all)]
     fn new<F, Fut>(stream: S, config: Option<Config>, is_client: bool, f: F) -> Self
     where
         F: FnMut(yamux::Stream) -> Fut,
@@ -55,6 +57,7 @@ where
         }
     }
 
+    #[instrument(skip_all)]
     // open a new stream
     pub async fn open_stream(
         &mut self,
@@ -71,10 +74,10 @@ mod tests {
     use crate::{
         assert_res_ok,
         network::tls::utils::{tls_acceptor, tls_connector},
+        utils::DummyStream,
         CommandRequest, KvError, MemTable, ProstServerStream, Service, ServiceInner, Storage,
         TlsServerAcceptor,
     };
-
     use anyhow::Result;
     use tokio::net::{TcpListener, TcpStream};
     use tokio_rustls::server;
@@ -82,6 +85,17 @@ mod tests {
     use tracing::warn;
 
     use super::*;
+
+    #[tokio::test]
+    async fn yamux_ctrl_creation_should_work() -> Result<()> {
+        let s = DummyStream::default();
+        let mut ctrl = YamuxCtrl::new_client(s, None);
+        let stream = ctrl.open_stream().await;
+
+        assert!(stream.is_ok());
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn yamux_ctrl_client_server_should_work() -> Result<()> {
