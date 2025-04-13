@@ -21,9 +21,10 @@ use tokio::{
 };
 use tokio_rustls::client;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tracing::{info, info_span};
+use tracing::{info, info_span, instrument};
 
 // build  k-v server with config
+#[instrument(skip_all)]
 pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
     let cert = config.tls.cert.clone();
     let key = config.tls.key.clone();
@@ -41,6 +42,7 @@ pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
 }
 
 // build k-v client with config
+#[instrument(skip_all)]
 pub async fn start_client_with_config(
     config: &ClientConfig,
 ) -> Result<YamuxCtrl<client::TlsStream<TcpStream>>> {
